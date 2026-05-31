@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SwipeShop - Belanja Mudah</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            primary: '#004ac6',
+                            container: '#2563eb',
+                            background: '#f8f9fa',
+                            surface: '#ffffff',
+                            success: '#10b981', // Emerald 500
+                            warning: '#fbbf24', // Amber 400
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 20px 40px -15px rgba(0, 83, 219, 0.12)',
+                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <style>
+        body {
+            /* Prevent overscroll/bounce effect on mobile browsers */
+            overscroll-behavior-y: contain; 
+            touch-action: pan-y;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+
+        /* Prevent text selection during swipe */
+        .no-select {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Hide scrollbar for list but allow scrolling */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-brand-background flex justify-center h-[100dvh] w-full overflow-hidden relative selection:bg-brand-primary selection:text-white" x-data="app()">
+
+<!-- Subtle Gradient Background to mix with brand background -->
+<div class="absolute inset-0 bg-gradient-to-br from-[#e8efff] via-[#f8f9fa] to-[#e1e9fc] -z-10"></div>
+
+<!-- Background Tint Indicators based on swipe direction (Only visible in Swipe Mode) -->
+<div class="absolute inset-0 z-0 transition-opacity duration-300 pointer-events-none"
+     x-show="currentView === 'swipe'"
+     :class="{
+        'bg-green-100 opacity-60': swipeDirection === 'right',
+        'bg-orange-50 opacity-60': swipeDirection === 'left',
+        'opacity-0': swipeDirection === null
+     }">
+</div>
+
+<!-- Main Mobile Container -->
+<div class="max-w-md w-full mx-auto h-full flex flex-col relative overflow-hidden">
+    
+    <!-- DYNAMIC CONTENT AREA -->
+    <div class="flex-1 relative w-full overflow-hidden">
+        
+        <!-- ==================== -->
+        <!-- 1. LIST VIEW         -->
+        <!-- ==================== -->
+        <div x-show="currentView === 'list'" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform -translate-x-8"
+             x-transition:enter-end="opacity-100 transform translate-x-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 transform translate-x-0"
+             x-transition:leave-end="opacity-0 transform -translate-x-8"
+             class="absolute inset-0 flex flex-col pt-6 px-4 pb-0 z-10"
+             style="display: none;">
+            
+            <header class="mb-6 px-2">
+                <h1 class="text-[40px] leading-[48px] font-[800] text-gray-900 tracking-tight">Mau belanja apa hari ini?</h1>
+            </header>
+
+            <!-- Input Field -->
+            <div class="mb-6 px-2">
+                <div class="bg-white border border-gray-200 rounded-2xl flex items-center p-2 shadow-sm focus-within:ring-4 focus-within:ring-brand-primary/20 focus-within:border-brand-primary transition-all">
+                    <input type="text" x-model="newItemText" @keydown.enter="addItem()" placeholder="Ketik nama barang..." class="flex-1 bg-transparent border-none text-[22px] px-4 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0">
+                    <button @click="addItem()" class="w-[56px] h-[56px] bg-brand-primary text-white rounded-xl flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-transform shadow-soft focus:outline-none focus:ring-4 focus:ring-blue-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- List Header -->
+            <div class="px-2 flex justify-between items-end mb-4">
+                <h2 class="text-[20px] font-[600] text-gray-600">Daftar Anda (<span x-text="pendingItems.length"></span>)</h2>
+                <button @click="clearAll()" x-show="pendingItems.length > 0" class="text-[18px] font-[700] text-brand-primary hover:text-blue-800 focus:outline-none active:scale-95">Bersihkan</button>
+            </div>
+
+            <!-- Scrollable List -->
+            <div class="flex-1 overflow-y-auto hide-scrollbar pb-32 px-2 space-y-4">
+                <template x-for="item in pendingItems" :key="item.id">
+                    <div class="bg-white rounded-2xl p-4 flex items-center shadow-sm border border-gray-100 transition-all">
+                        <!-- Icon Box -->
+                        <div class="w-16 h-16 rounded-xl flex items-center justify-center mr-5 shrink-0" :class="item.colorClass">
+                            <span class="text-3xl" x-text="item.iconEmoji"></span>
+                        </div>
+                        <!-- Text Content -->
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-[24px] font-[700] text-gray-900 truncate" x-text="item.name"></h3>
+                            <p class="text-[18px] text-gray-500 font-[500] truncate" x-show="item.description" x-text="item.description"></p>
+                        </div>
+                        <!-- Delete Button -->
+                        <button @click="removeItem(item.id)" class="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full active:scale-95 focus:outline-none shrink-0 transition-colors ml-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </template>
+                
+                <!-- Empty State -->
+                <template x-if="pendingItems.length === 0">
+                    <div class="flex flex-col items-center justify-center text-center text-gray-400 h-48">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <p class="text-[22px] font-[600] text-gray-500">Daftar belanja kosong</p>
+                        <p class="text-[18px] mt-1">Tambahkan barang di atas.</p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- ==================== -->
+        <!-- 2. SWIPE VIEW        -->
+        <!-- ==================== -->
+        <div x-show="currentView === 'swipe'"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-x-8"
+             x-transition:enter-end="opacity-100 transform translate-x-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 transform translate-x-0"
+             x-transition:leave-end="opacity-0 transform translate-x-8"
+             class="absolute inset-0 flex flex-col pt-2 z-10"
+             style="display: none;">
+            
+            <!-- Top Header (Glassmorphism) -->
+            <header class="glass-panel z-20 px-4 py-4 flex items-center justify-between mx-4 rounded-3xl shadow-glass shrink-0">
+                <!-- Undo Button -->
+                <button @click="undo()" :disabled="history.length === 0" 
+                        class="w-[56px] h-[56px] rounded-full flex items-center justify-center transition-colors shadow-sm focus:outline-none focus:ring-4 active:scale-95"
+                        :class="history.length > 0 ? 'bg-white text-brand-primary hover:bg-blue-50 focus:ring-blue-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                </button>
+                <!-- Center Text -->
+                <h1 class="text-[30px] leading-[38px] font-[800] text-brand-primary tracking-tight">Sisa <span x-text="pendingItems.length"></span></h1>
+                <!-- Settings -->
+                <button class="w-[56px] h-[56px] rounded-full flex items-center justify-center text-gray-500 hover:text-gray-800 transition-colors focus:outline-none focus:ring-4 focus:ring-gray-200 active:scale-95 bg-white shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            </header>
+
+            <!-- Swipe Area -->
+            <main class="flex-1 relative flex items-center justify-center w-full px-4 mt-2 mb-2 overflow-visible">
+                
+                <!-- The Card -->
+                <template x-if="currentCard">
+                    <div class="absolute z-10 w-full max-w-[92%] aspect-[3/4] max-h-[60vh] bg-white rounded-[1.5rem] shadow-soft flex flex-col items-center justify-center p-6 origin-bottom no-select cursor-grab"
+                         :class="{ 'cursor-grabbing': isDragging, 'transition-transform duration-300 ease-out': !isDragging }"
+                         :style="cardStyle"
+                         @touchstart="startSwipe"
+                         @touchmove="moveSwipe"
+                         @touchend="endSwipe"
+                         @mousedown="startSwipe"
+                         @mousemove="moveSwipe"
+                         @mouseup="endSwipe"
+                         @mouseleave="endSwipe">
+                        
+                        <!-- Chip -->
+                        <div class="absolute top-8 bg-indigo-50 text-brand-primary px-6 py-2 rounded-full font-[700] text-[20px] leading-[28px]"
+                             x-text="currentCard.category">
+                        </div>
+
+                        <!-- Big Icon -->
+                        <div class="w-56 h-56 rounded-full flex items-center justify-center mb-8"
+                             :class="currentCard.colorClass.replace('bg-', 'bg-opacity-30 bg-').replace('text-', 'text-opacity-90 text-')">
+                            <span class="text-[96px]" x-text="currentCard.iconEmoji"></span>
+                        </div>
+
+                        <!-- Content -->
+                        <h2 class="text-[48px] leading-[56px] font-[800] text-gray-900 text-center mb-3 line-clamp-2" x-text="currentCard.name"></h2>
+                        <p class="text-[24px] leading-[32px] text-gray-500 font-[500] text-center" x-text="currentCard.description || 'Tidak ada catatan'"></p>
+
+                        <!-- Swipe Overlay Indicators -->
+                        <div class="absolute inset-0 rounded-[1.5rem] flex items-center justify-between px-8 pointer-events-none opacity-0 transition-opacity duration-200"
+                             :style="`opacity: ${Math.min(Math.abs(currentX) / 100, 1)}`">
+                            <div class="w-24 h-24 bg-brand-warning/20 rounded-full flex items-center justify-center text-brand-warning transition-transform"
+                                 :class="currentX < 0 ? 'scale-100' : 'scale-0'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </div>
+                            <div class="w-24 h-24 bg-brand-success/20 rounded-full flex items-center justify-center text-brand-success transition-transform"
+                                 :class="currentX > 0 ? 'scale-100' : 'scale-0'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Empty State for Swipe View -->
+                <template x-if="!currentCard">
+                    <div class="flex flex-col items-center justify-center text-center p-8 bg-white/50 rounded-[1.5rem] shadow-soft max-w-[92%] w-full h-[60vh] backdrop-blur-sm border border-white">
+                        <div class="w-32 h-32 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <h2 class="text-[36px] font-[800] text-gray-900 mb-4">Selesai!</h2>
+                        <p class="text-[24px] text-gray-600 font-[500]">Semua barang sudah diproses.</p>
+                        <button @click="currentView = 'list'" class="mt-8 px-8 py-4 bg-brand-primary text-white rounded-full font-[700] text-[20px] shadow-soft active:scale-95">
+                            Kembali ke Daftar
+                        </button>
+                    </div>
+                </template>
+            </main>
+
+        </div>
+
+    </div> <!-- End Dynamic Area -->
+
+    <!-- Bottom Navigation (Always Visible) -->
+    <nav class="glass-panel mt-auto mb-6 mx-4 rounded-3xl px-4 py-3 flex justify-evenly items-center z-30 relative shadow-glass shrink-0">
+        <!-- Tab 1: List -->
+        <button @click="currentView = 'list'" class="flex flex-col items-center justify-center transition-all focus:outline-none"
+                :class="currentView === 'list' ? 'w-[110px] h-[64px] bg-brand-primary text-white rounded-2xl shadow-soft' : 'w-[80px] h-[64px] text-gray-500 hover:text-gray-900 active:scale-95'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            <span class="text-[14px]" :class="currentView === 'list' ? 'font-[700]' : 'font-[600]'">Daftar</span>
+        </button>
+        
+        <!-- Tab 2: Swipe -->
+        <button @click="currentView = 'swipe'" class="flex flex-col items-center justify-center transition-all focus:outline-none"
+                :class="currentView === 'swipe' ? 'w-[110px] h-[64px] bg-brand-primary text-white rounded-2xl shadow-soft' : 'w-[80px] h-[64px] text-gray-500 hover:text-gray-900 active:scale-95'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            <span class="text-[14px]" :class="currentView === 'swipe' ? 'font-[700]' : 'font-[600]'">Swipe</span>
+        </button>
+    </nav>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('app', () => ({
+            // Global State
+            currentView: 'list', // 'list' or 'swipe'
+            newItemText: '',
+            
+            // Sample Data mimicking the screenshot
+            items: [
+                { id: 1, name: 'Telur Segar', description: '1 Rak', category: 'Protein', status: 'pending', colorClass: 'bg-emerald-100 text-emerald-500', iconEmoji: '🥚' },
+                { id: 2, name: 'Susu Segar', description: '2 Liter', category: 'Minuman', status: 'pending', colorClass: 'bg-blue-100 text-blue-500', iconEmoji: '🥛' },
+                { id: 3, name: 'Roti Gandum', description: 'Sari Roti', category: 'Roti & Kue', status: 'pending', colorClass: 'bg-amber-100 text-amber-600', iconEmoji: '🍞' },
+                { id: 4, name: 'Apel Merah', description: '1 Kg', category: 'Buah-buahan', status: 'pending', colorClass: 'bg-red-100 text-red-500', iconEmoji: '🍎' },
+                { id: 5, name: 'Beras 5kg', description: 'Merk Sedap Wangi', category: 'Kebutuhan Pokok', status: 'pending', colorClass: 'bg-indigo-100 text-indigo-500', iconEmoji: '🍚' },
+            ],
+            
+            history: [], // Stores IDs of items swiped to allow Undo
+            
+            get pendingItems() {
+                return this.items.filter(i => i.status === 'pending');
+            },
+            
+            get currentCard() {
+                return this.pendingItems.length > 0 ? this.pendingItems[0] : null;
+            },
+            
+            addItem() {
+                if (this.newItemText.trim() === '') return;
+                
+                // Randomize a nice color and emoji for new items
+                const styles = [
+                    { c: 'bg-purple-100 text-purple-500', e: '🛍️' },
+                    { c: 'bg-cyan-100 text-cyan-500', e: '🛒' },
+                    { c: 'bg-rose-100 text-rose-500', e: '🥩' },
+                    { c: 'bg-orange-100 text-orange-500', e: '🥕' },
+                ];
+                const rand = styles[Math.floor(Math.random() * styles.length)];
+                
+                this.items.push({
+                    id: Date.now(),
+                    name: this.newItemText.trim(),
+                    description: '',
+                    category: 'Baru Ditambahkan',
+                    status: 'pending',
+                    colorClass: rand.c,
+                    iconEmoji: rand.e
+                });
+                
+                this.newItemText = '';
+            },
+            
+            removeItem(id) {
+                this.items = this.items.filter(i => i.id !== id);
+                this.history = this.history.filter(h => h.id !== id);
+            },
+            
+            clearAll() {
+                if(confirm('Apakah Anda yakin ingin menghapus semua daftar belanja ini?')) {
+                    this.items = this.items.filter(i => i.status !== 'pending');
+                }
+            },
+            
+            undo() {
+                if (this.history.length === 0) return;
+                const lastAction = this.history.pop();
+                const itemIndex = this.items.findIndex(i => i.id === lastAction.id);
+                
+                if (itemIndex > -1) {
+                    if (lastAction.direction === 'right') {
+                        // Jika sebelumnya di-swipe Kanan (Selesai), ubah status kembali ke pending
+                        this.items[itemIndex].status = 'pending';
+                    } else if (lastAction.direction === 'left') {
+                        // Jika sebelumnya di-swipe Kiri (Nanti), pindahkan kembali ke urutan paling atas
+                        const item = this.items.splice(itemIndex, 1)[0];
+                        
+                        // Cari posisi pending item pertama (opsional, tapi idealnya taruh di index teratas)
+                        // Karena kita mem-filter pendingItems dari this.items, unshift akan membuatnya di atas
+                        this.items.unshift(item);
+                    }
+                }
+            },
+
+            // ==========================================
+            // SWIPE LOGIC
+            // ==========================================
+            isDragging: false,
+            startX: 0,
+            currentX: 0,
+            rotation: 0,
+            swipeDirection: null,
+            threshold: 120, // pixels needed to trigger action
+
+            get cardStyle() {
+                if (this.isDragging || this.currentX !== 0) {
+                    return `transform: translateX(${this.currentX}px) rotate(${this.rotation}deg);`;
+                }
+                return 'transform: translateX(0px) rotate(0deg); transition: transform 0.2s ease-out;';
+            },
+
+            getClientX(e) {
+                return e.touches ? e.touches[0].clientX : e.clientX;
+            },
+
+            startSwipe(e) {
+                if (!this.currentCard) return;
+                this.isDragging = true;
+                this.startX = this.getClientX(e);
+            },
+
+            moveSwipe(e) {
+                if (!this.isDragging) return;
+                
+                const currentClientX = this.getClientX(e);
+                this.currentX = currentClientX - this.startX;
+                this.rotation = this.currentX * 0.04;
+                
+                if (this.currentX > 40) {
+                    this.swipeDirection = 'right';
+                } else if (this.currentX < -40) {
+                    this.swipeDirection = 'left';
+                } else {
+                    this.swipeDirection = null;
+                }
+            },
+
+            endSwipe() {
+                if (!this.isDragging) return;
+                this.isDragging = false;
+
+                if (Math.abs(this.currentX) > this.threshold) {
+                    // Trigger swipe out
+                    this.triggerSwipeAnimation(this.currentX > 0 ? 'right' : 'left');
+                } else {
+                    // Snap back
+                    this.currentX = 0;
+                    this.rotation = 0;
+                    this.swipeDirection = null;
+                }
+            },
+            
+            forceSwipe(direction) {
+                if (this.isDragging || !this.currentCard) return;
+                this.triggerSwipeAnimation(direction);
+            },
+
+            triggerSwipeAnimation(direction) {
+                const dirMultiplier = direction === 'right' ? 1 : -1;
+                this.swipeDirection = direction;
+                this.currentX = dirMultiplier * window.innerWidth;
+                this.rotation = dirMultiplier * 30;
+                
+                const swipedItemId = this.currentCard.id;
+                
+                // Wait for animation to finish then update state
+                setTimeout(() => {
+                    const itemIndex = this.items.findIndex(i => i.id === swipedItemId);
+                    if (itemIndex > -1) {
+                        this.history.push({ id: swipedItemId, direction: direction });
+                        
+                        if (direction === 'right') {
+                            // Kondisi A: Dimasukkan ke troli (Selesai)
+                            this.items[itemIndex].status = 'bought';
+                        } else if (direction === 'left') {
+                            // Kondisi B: Belum ketemu (Nanti), pindahkan ke antrean paling belakang
+                            const item = this.items.splice(itemIndex, 1)[0];
+                            this.items.push(item);
+                        }
+                    }
+                    
+                    // Reset position instantly for the next card
+                    this.currentX = 0;
+                    this.rotation = 0;
+                    this.swipeDirection = null;
+                }, 300);
+            }
+        }))
+    });
+</script>
+</body>
+</html>
